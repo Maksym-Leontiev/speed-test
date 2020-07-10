@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Speed Test Tool</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.min.css"/>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css"
+          integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous"/>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
+            integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"
+            integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo"
+            crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"
+            integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI"
+            crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.3/Chart.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <div class="row">
+        <h1>Speed Test Tool</h1>
+    </div>
+    <div class="form-group row">
+        <div class="col-sm-5">
+            <label for="url">URL</label>
+            <input class="form-control" id="url" type="text"
+                   value="http://localhost:9000/stingray/karaoke/21383/21383_mezz_HUB_2.0_96k_HE-AAC.mp4">
+        </div>
+        <div class="col-sm-2">
+            <label for="speed">Speed Limit (Kbps)</label>
+            <input class="form-control" id="speed" type="text" value="5000">
+        </div>
+        <div class="col-sm-2">
+            <label for="count">Repeat Count</label>
+            <input class="form-control" id="count" type="text" value="5">
+        </div>
+        <div class="col-sm-2">
+            <label for="chartUpdateFrequency">Update Frequency(s)</label>
+            <input class="form-control" id="chartUpdateFrequency" type="text" value="2">
+        </div>
+        <button id="startButton" type="button" class="btn btn-success" onclick=runTest()>Go</button>
+    </div>
+    <div class="row">
+        <div class="col-sm-4">
+            <label for="currentSpeed">Downloading Speed:</label>
+            <span id="currentSpeed"></span><span> (Kbps)</span>
+        </div>
+        <div class="col-sm-4">
+            <label for="currentDownloadingDuration">Downloading Duration:</label>
+            <span id="currentDownloadingDuration"></span><span> (ms)</span>
+        </div>
+        <div class="col-sm-4">
+            <label for="currentDownloadedBytes">Downloaded Bytes:</label>
+            <span id="currentDownloadedBytes"></span>
+        </div>
+    </div>
+    <div class="row">
+        <canvas id="downloadingPerformanceChart" width="400" height="200"></canvas>
+    </div>
+    <table class="table table-dark">
+        <thead>
+        <tr>
+            <th scope="col">Start</th>
+            <th scope="col">End</th>
+            <th scope="col">Size</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Speed Limit</th>
+            <th scope="col">Achieved Speed</th>
+        </tr>
+        </thead>
+        <tbody id="result">
+        </tbody>
+    </table>
+</div>
+<script>
+    const MAX_CHART_POINTS = 30;
+    var ctx = document.getElementById('downloadingPerformanceChart').getContext('2d');
+    var chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Downloading Speed',
+                backgroundColor: 'rgb(4, 87, 78)',
+                borderColor: 'rgb(19, 63, 102)',
+                data: []
+            }]
+        },
+        // Configuration options go here
+        options: {}
+    });
+
+
+    function refreshUI() {
+        chart.data.datasets[0].data = [];
+        chart.data.labels = [];
+        chart.update();
+        $('#result').empty();
+        $('#currentDownloadedBytes').text("");
+        $('#currentDownloadingDuration').text("");
+        $('#currentSpeed').text("");
+
+    }
+
+    function runTest() {
+        refreshUI();
+        let speed = Number($('#speed').val());
+        let url = $('#url').val();
+        let count =  Number($('#count').val());
+        let chartUpdateFrequency =  Number($('#chartUpdateFrequency').val());
+        let xhr = new XMLHttpRequest();
+        testSpeed(xhr, speed, url, chartUpdateFrequency, count);
+    }
+
+    function visualizeSpeedMeasurementResults(startTime, endTime, size, speedLimit, fileDownloadingFinished) {
+        let duration = endTime.getTime() - startTime.getTime();
+        let speed = ((size * 8) / (duration / 1000) / 1000).toFixed(2);
+
+        $('#currentDownloadedBytes').text(size);
+        $('#currentDownloadingDuration').text(duration);
+        $('#currentSpeed').text(speed);
+        chart.data.datasets[0].data.push(speed);
+        chart.data.labels.push(endTime.toISOString());
+        if (chart.data.datasets[0].data.length > MAX_CHART_POINTS) {
+            chart.data.labels.shift()
+            chart.data.datasets[0].data.shift();
+        }
+        chart.update();
+        if (fileDownloadingFinished) {
+            $('#result').append('<tr style="color:rgb(4, 212, 45);"><td>' + startTime.toISOString() + '</td><td> ' + endTime.toISOString() + '</td><td> ' + size + '</td><td>' + duration + ' ms</td><td> ' + speedLimit + '</td><td> ' + speed + '</td></tr>');
+        } else {
+            $('#result').append('<tr><td>' + startTime.toISOString() + '</td><td> ' + endTime.toISOString() + '</td><td> ' + size + '</td><td>' + duration + ' ms</td><td> ' + speedLimit + '</td><td> ' + speed + '</td></tr>');
+        }
+    }
+
+    function testSpeed(xhr, speedLimit, url, chartUpdateFrequency, count) {
+        xhr.open("GET", url, true);
+        //TODO:FIXME:Workaround for CORS, since X-Throughput-Limit atm not allowed
+        if (speedLimit != 5000) {
+            xhr.setRequestHeader("X-Throughput-Limit", speedLimit);
+        }
+        if (count <= 0) {
+            $('#startButton').prop('disabled', false);
+            return
+        }
+        $('#startButton').prop('disabled', true);
+        let lastChartUpdate = new Date();
+        let countedBytes = 0;
+        xhr.onprogress = function () {
+            let now = new Date();
+            let bytesDownloaded = xhr.response.length;
+            let duration = now.getTime() - lastChartUpdate.getTime();
+            let speed = ((bytesDownloaded * 8) / ((now.getTime() - startTime.getTime()) / 1000) / 1000).toFixed(2)
+            if (speed > speedLimit) {
+                return
+            }
+            $('#currentDownloadedBytes').text(bytesDownloaded);
+            $('#currentDownloadingDuration').text(now.getTime() - startTime.getTime());
+            $('#currentSpeed').text(speed);
+
+            if (duration > chartUpdateFrequency * 1000) {
+                visualizeSpeedMeasurementResults(lastChartUpdate, new Date(), bytesDownloaded - countedBytes, speedLimit, false)
+                lastChartUpdate = now;
+                countedBytes = bytesDownloaded;
+            }
+        };
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+                if (xhr.status !== 200) {
+                    if (xhr.statusText.length > 0) {
+                        alert("Error: " + xhr.statusText);
+                    } else {
+                        alert("Error: See console");
+                    }
+                    $('#startButton').prop('disabled', false);
+                    refreshUI();
+                    return
+                }
+                visualizeSpeedMeasurementResults(startTime, new Date(), xhr.response.length, speedLimit, true)
+                testSpeed(xhr, speedLimit, url, chartUpdateFrequency, count - 1)
+            }
+        }
+        xhr.onabort = function () {
+            if (xhr.statusText.length > 0) {
+                alert("Error:" + xhr.statusText);
+            } else {
+                alert("Error: See console, maybe CORS not enabled?");
+            }
+        }
+        let startTime = new Date();
+        xhr.send();
+    }
+
+</script>
+</body>
+</html>
